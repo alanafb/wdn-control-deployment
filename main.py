@@ -8,6 +8,7 @@ Created on Sat Dec  2 17:34:21 2023
 import node as nodec
 #from node import Node, check_connections, draw_graph
 from network_node_distance import obtener_resultado
+from distancia_euclidea import calcular_distancias
 from pruebas_chama import get_selected_sensors
 
 def crear_nodos(result, index_to_label):
@@ -39,11 +40,17 @@ def crear_nodos(result, index_to_label):
 
 # Usar la función para obtener result e index_to_label
 inp_file = 'C:\\Users\\alana\\Documents\\A_TFM\\WORKSPACE\\CTOWN.INP'
-#nodos_sensorizados = ["J269","J169","J301","T3","T5","T7"]
-nodos_sensorizados = get_selected_sensors(inp_file, 15)
+
+nodos_sensorizados = get_selected_sensors(inp_file, 7)
 result, index_to_label = obtener_resultado(inp_file, nodos_sensorizados)
+#result, index_to_label = calcular_distancias(inp_file, nodos_sensorizados)
 nodes_list = crear_nodos(result, index_to_label)
 
+nodec.draw_graph(nodes_list)
+nodec.check_connections(nodes_list)
+nodec.draw_graph(nodes_list)
+
+nodec.add_random_nodes(nodes_list, 1)
 nodec.draw_graph(nodes_list)
 nodec.check_connections(nodes_list)
 nodec.draw_graph(nodes_list)
