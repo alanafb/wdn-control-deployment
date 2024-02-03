@@ -9,7 +9,7 @@ import node as nodec
 #from node import Node, check_connections, draw_graph
 from network_node_distance import obtener_resultado
 from distancia_euclidea import calcular_distancias
-from pruebas_chama import get_selected_sensors
+from modulo_chama import get_selected_sensors
 
 def crear_nodos(result, index_to_label):
     nodes_list = [nodec.Node(is_SCADA=value['is_SCADA'], name=index_to_label[key]) for key, value in result.items()]
