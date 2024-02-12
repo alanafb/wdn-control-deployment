@@ -1,7 +1,7 @@
 import wntr
 import networkx as nx
 import numpy as np
-from prim_algorithm import Graph
+#from prim_algorithm import Graph
 
 def obtener_resultado(inp_file, nodos_sensorizados):
     # Cargar el modelo de la red de distribución de agua
@@ -33,10 +33,10 @@ def obtener_resultado(inp_file, nodos_sensorizados):
     for index, label in index_to_label.items():
         print(f"{index}: {label}")
 
-    g = Graph(len(nodos_sensorizados))
-    g.graph = dist_matrix
+   # g = Graph(len(nodos_sensorizados))
+   # g.graph = dist_matrix
 
-    result = g.primMST()
+   # result = g.primMST()
 
-    return result, index_to_label
+    return dist_matrix, index_to_label
 

@@ -1,7 +1,7 @@
 import wntr
 from math import sqrt
 import numpy as np
-from prim_algorithm import Graph
+#from prim_algorithm import Graph
 
 def euclidean_distance(coord1, coord2):
     x1, y1 = coord1
@@ -49,9 +49,9 @@ def calcular_distancias(inp_file, nodos_sensorizados):
     for index, label in index_to_label.items():
         print(f"{index}: {label}")
 
-    g = Graph(num_nodos)
-    g.graph = dist_matrix
+    # g = Graph(num_nodos)
+    # g.graph = dist_matrix
 
-    result = g.primMST()
+    # result = g.primMST()
 
-    return result, index_to_label
+    return dist_matrix, index_to_label
