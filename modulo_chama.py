@@ -14,6 +14,10 @@ import pandas as pd
 import matplotlib.pylab as plt
 import chama
 import wntr
+import warnings
+
+# Suprimir todos los warnings (No se recomienda a menos que estés seguro de lo que estás haciendo)
+warnings.filterwarnings("ignore")
 
 def get_selected_sensors(inp_file, num_sensors):
     wn = wntr.network.WaterNetworkModel(inp_file)
@@ -23,8 +27,8 @@ def get_selected_sensors(inp_file, num_sensors):
     valvulas = [link for link in wn.links if wn.links[link].link_type == 'Valve']
 
     nodos_criticos = tanques.copy()
-    
-     # Crear un grafo dirigido a partir de la red
+
+    # Crear un grafo dirigido a partir de la red
     grafo = wn.to_graph()
 
     for bomba in bombas:
@@ -33,7 +37,7 @@ def get_selected_sensors(inp_file, num_sensors):
 
         # Verificar si el nodo de inicio está conectado a más de un nodo (excluyendo nodos con bombas)
         nodos_adyacentes_start = list(grafo.successors(start_node)) + list(grafo.predecessors(start_node))
-        nodos_adyacentes_start = [nodo for nodo in nodos_adyacentes_start if nodo != end_node 
+        nodos_adyacentes_start = [nodo for nodo in nodos_adyacentes_start if nodo != end_node
                                   and not any(link for link in wn.get_links_for_node(nodo) if wn.get_link(link).link_type == 'Pump' and wn.get_link(link).end_node_name == end_node)]
 
         if len(nodos_adyacentes_start) > 1 and all(wn.get_node(nodo).node_type != 'Reservoir' for nodo in nodos_adyacentes_start):
@@ -47,7 +51,7 @@ def get_selected_sensors(inp_file, num_sensors):
 
         if len(nodos_adyacentes_end) > 1 and all(wn.get_node(nodo).node_type != 'Reservoir' for nodo in nodos_adyacentes_end):
             nodos_criticos.append(end_node)
-            
+
     for component in valvulas:
         link = wn.get_link(component)
         start_node = link.start_node.name
@@ -69,7 +73,7 @@ def get_selected_sensors(inp_file, num_sensors):
         trace.columns = ['T', 'Node', inj_node]
         signal = signal.combine_first(trace)
     signal.to_csv('signal.csv')
-    
+
     # Define feasible sensors using location, sample times, and detection threshold
     sensor_names = nodos_criticos
     sample_times = np.arange(0, wn.options.time.duration, wn.options.time.hydraulic_timestep)
@@ -80,14 +84,14 @@ def get_selected_sensors(inp_file, num_sensors):
         detector = chama.sensors.Point(threshold, sample_times)
         stationary_pt_sensor = chama.sensors.Sensor(position, detector)
         sensors[location] = stationary_pt_sensor
-    
+
     # Extract minimum detection time for each scenario-sensor pair
     det_times = chama.impact.extract_detection_times(signal, sensors)
     det_time_stats = chama.impact.detection_time_stats(det_times)
     min_det_time = det_time_stats[['Scenario','Sensor','Min']]
     min_det_time.rename(columns = {'Min':'Impact'}, inplace = True)
     min_det_time.loc[:, 'Impact'] = min_det_time['Impact'].astype(float)
-    
+
     # Run sensor placement optimization to minimize detection time using 0 to 5 sensors
     #   The impact for undetected scenarios is set at 1.5x the max sample time
     #   Sensor cost is defined uniformly using a value of 1.  This means that
@@ -100,27 +104,27 @@ def get_selected_sensors(inp_file, num_sensors):
     results = {}
     for n in sensor_budget:
         impactform = chama.optimize.ImpactFormulation()
-        results[n] = impactform.solve(min_det_time, sensor_characteristics, 
+        results[n] = impactform.solve(min_det_time, sensor_characteristics,
                                       scenario_characteristics, n)
-    
+
     # Plot objective for each sensor placement
     objective_values =[results[n]['Objective']/3600 for n in sensor_budget]
     fig, ax1 = plt.subplots()
     ax1.plot(sensor_budget, objective_values, 'b', marker='.')
     ax1.set_xlabel('Number of sensors')
     ax1.set_ylabel('Expected time to detection (hr)')
-    
+
     # Plot selected sensors, when using 5 sensors
     n = num_sensors
     selected_sensors = results[n]['Sensors']
     selected_sensors.insert(0, "J269")
-    wntr.graphics.plot_network(wn, node_attribute=selected_sensors, 
+    wntr.graphics.plot_network(wn, node_attribute=selected_sensors,
                                title=f'Selected sensors, n = {n}')
-    
+
     # Plot detection time for each scenario, when using n sensors
     assessment = results[n]['Assessment']
     assessment.set_index('Scenario', inplace=True)
-    wntr.graphics.plot_network(wn, node_attribute=assessment['Impact']/3600, 
+    wntr.graphics.plot_network(wn, node_attribute=assessment['Impact']/3600,
                                title=f'Detection time (hr), n = {n}')
     return selected_sensors
 

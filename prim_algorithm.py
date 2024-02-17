@@ -8,12 +8,16 @@ Created on Tue Nov 21 20:00:17 2023
 import sys
 import networkx as nx
 import matplotlib.pyplot as plt
+import warnings
+
+# Suprimir todos los warnings (No se recomienda a menos que estés seguro de lo que estás haciendo)
+warnings.filterwarnings("ignore")
 
 class Graph():
     def __init__(self, vertices, cable=None, inalambrica=None):
         self.V = vertices
         self.graph = [[0 for column in range(vertices)]
-                        for row in range(vertices)]
+                      for row in range(vertices)]
         self.cable = cable
         self.inalambrica = inalambrica
 
@@ -25,7 +29,7 @@ class Graph():
                 print(parent[i], "-", i, "\t", active_graph[i][parent[i]])
             else:
                 print(parent[i], "-", i, "\t", self.graph[i][parent[i]])
-        
+
 
 
     def minKey(self, key, mstSet):
@@ -65,7 +69,9 @@ class Graph():
 
         for i in range(1, self.V):
             nodes[parent[i]]['connections'].append(i)
-            nodes[i]['connections'].append(parent[i])
+
+        for node_id, data in nodes.items():
+            print(f"Node {node_id}: {data['connections']}")
 
         return nodes
 
@@ -76,18 +82,18 @@ class Graph():
         key[0] = 0
         mstSet = [False] * self.V
         parent[0] = -1
-            
+
         # Antes del bucle
         selectores = []
 
         for cout in range(self.V):
             u = self.minKey(key, mstSet)
             mstSet[u] = True
-            
+
             if self.cable is not None and self.inalambrica is not None:
                 # Preguntar al usuario qué matriz desea utilizar
                 choice = input(f"Para la iteración {cout + 1}, ¿desea utilizar la matriz cable o la matriz inalámbrica? (1/2): ")
-                
+
                 # Verificar la elección y actualizar self.graph en consecuencia
                 if choice == '1':
                     self.graph = self.cable
@@ -99,7 +105,7 @@ class Graph():
                     print("Opción no válida. Utilizando la matriz por defecto.")
                     self.graph = self.cable
                     selectores.append(1)
-                
+
             for v in range(self.V):
                 if self.graph[u][v] > 0 and mstSet[v] == False and key[v] > self.graph[u][v]:
                     key[v] = self.graph[u][v]
