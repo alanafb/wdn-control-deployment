@@ -1,11 +1,9 @@
 import networkx as nx
-import numpy as np
 import matplotlib.pyplot as plt
-import itertools
 import random
 import warnings
 
-# Suprimir todos los warnings (No se recomienda a menos que estés seguro de lo que estás haciendo)
+# Suprimir todos los warnings 
 warnings.filterwarnings("ignore")
 
 class Node:
@@ -47,7 +45,7 @@ class Node:
 
     def add_node_between(self, node_before, node_list):
         new_node = Node(name=f"{node_before.name}_{self.name}")
-        # Verificar si new_node ya existe en node_list
+         # Verificar si new_node ya existe en node_list
         if any(node.name == new_node.name for node in node_list):
             print(f"El nodo {new_node.name} ya existe en la lista. No se añadió.")
             return
@@ -57,7 +55,7 @@ class Node:
         node_list.append(new_node)
         print(f"Nuevo nodo añadido entre {node_before.name} y {self.name}")
 
-
+    
 def find_extremes(graph):
     # Encontrar todos los nodos sin sucesores
     return [node for node in graph.nodes if not any(graph.successors(node))]
@@ -111,7 +109,7 @@ def check_connections(node_list, cadenas_PLC, cadenas_SCADA):
             for node_b in node_list:
                 if node_b != node_a and node_b.connects_to_SCADA and node_b in node_a.connected_to:
                     node_b.disconnect_from_SCADA()
-
+    
     for chain_names in cadenas_PLC:
         chain_nodes = order_nodes_by_names(node_list, chain_names)
         if chain_nodes:
@@ -128,51 +126,37 @@ def check_connections(node_list, cadenas_PLC, cadenas_SCADA):
 def process_graph(G, nodes_list):
     # Encontrar nodos extremos
     extreme_nodes = find_extremes(G)
-
+    
     # Encontrar nodos PLC y SCADA
     PLC_nodes = find_PLC_nodes(nodes_list)
     SCADA_nodes = find_SCADA_nodes(nodes_list)[0]
-
+    
     print(f"extreme_nodes: {extreme_nodes}")
     print(f"PLC_nodes: {PLC_nodes}")
     print(f"SCADA_node: {SCADA_nodes}")
-
+      
     # Generar caminos desde SCADA a nodos extremos
     paths_SCADA = generate_paths_from_SCADA(G, SCADA_nodes, extreme_nodes)
-
+    
     # Imprimir caminos desde SCADA a nodos extremos
     print("Caminos desde SCADA a nodos extremos:")
     for paths in paths_SCADA:
-        print(paths)
-
-        # Generar caminos desde PLC a nodos extremos utilizando caminos desde SCADA
+        print(paths) 
+        
+    # Generar caminos desde PLC a nodos extremos utilizando caminos desde SCADA
     paths_PLC = generate_paths_from_PLC(G, PLC_nodes, extreme_nodes, paths_SCADA)
-
+    
     # Imprimir caminos desde PLC a nodos extremos
     print("Caminos desde PLC a nodos extremos:")
     for paths in paths_PLC:
         print(paths)
 
-    return paths_SCADA, paths_PLC
+    return paths_SCADA, paths_PLC        
 
-# Función para ajustar posiciones
-def adjust_positions(pos):
-    epsilon = 0.03
-    for node1, (x1, y1) in pos.items():
-        for node2, (x2, y2) in pos.items():
-            if node1 != node2:
-                if abs(x1 - x2) < epsilon:
-                    # Ajustar nodos con la misma coordenada horizontal
-                    pos[node1] = (x1 + 0.3 / 2, y1)
-                    pos[node2] = (x2 - 0.3 / 2, y2)
-
-                if abs(y1 - y2) < epsilon:
-                    # Ajustar nodos con la misma coordenada vertical
-                    pos[node1] = (x1, y1 + 0.3 / 2)
-                    pos[node2] = (x2, y2 - 0.3 / 2)
-
+                
 def create_graph(node_list):
     G = nx.DiGraph()
+    Gpos = nx.Graph()
 
     for node in node_list:
         attributes = {'color': 'skyblue'}
@@ -181,21 +165,21 @@ def create_graph(node_list):
         elif node.is_PLC:
             attributes['color'] = 'green'
         G.add_node(node.name, **attributes)
+        Gpos.add_node(node.name, **attributes)
 
     for node in node_list:
         for connected_node in node.connected_to:
             G.add_edge(node.name, connected_node.name)
+            Gpos.add_edge(node.name, connected_node.name)
 
-    return G
+    return G, Gpos
 
-def draw_graph(G):
+def draw_graph(G, Gpos):
     node_colors = [G.nodes[node]['color'] for node in G.nodes]
-
-    pos = nx.spectral_layout(G)
-    adjust_positions(pos)
+    pos = nx.kamada_kawai_layout(Gpos)
     nx.draw(G, pos, with_labels=True, node_color=node_colors, font_weight='bold', connectionstyle='arc3,rad=0.1')
     plt.show()
-
+    
 def add_random_nodes(node_list, num_nodes):
     for i in range(1, num_nodes + 1):
         new_node = Node(

@@ -5,7 +5,7 @@ from modulo_chama import get_selected_sensors
 from prim_algorithm import Graph
 import warnings
 
-# Suprimir todos los warnings (No se recomienda a menos que estés seguro de lo que estás haciendo)
+# Suprimir todos los warnings 
 warnings.filterwarnings("ignore")
 
 def crear_nodos(result, index_to_label):
@@ -16,12 +16,12 @@ def crear_nodos(result, index_to_label):
     for connection in SCADA_connections:
         nodes_list[connection].connects_to_SCADA = True
         nodes_list[connection].is_PLC = True
-
+        
     # Iterar sobre cada nodo en result para configurar connected_to
     for i, value in enumerate(result.values()):
         current_node = nodes_list[i]
         connections = value['connections']
-
+        
         # Obtener los nodos conectados y establecer connected_to en cada nodo
         for connection in connections:
             connection_index = list(index_to_label.keys()).index(connection)
@@ -29,15 +29,22 @@ def crear_nodos(result, index_to_label):
             current_node.connected_to.append(connected_node)
             if connected_node.is_PLC or connected_node.is_SCADA:
                 connected_node.connected_to.append(current_node)
-
+            
     return nodes_list
+
+def imprimir_seccion(titulo):
+    separador = '-' * 50  
+    print(separador)
+    print(titulo)
+    print(separador)
+
 
 def obtener_input_usuario():
     inp_file = input("Introduce la ruta al archivo INP: ")
     num_nodos_sensorizar = int(input("Introduce el número de nodos a sensorizar: "))
     tipo_conexion = int(input("Selecciona el tipo de conexión cable, inalámbrica o mixta (1/2/3): "))
     num_nodos_expansion = int(input("Introduce el número de nodos con los que quieres expandir la red: "))
-
+    
     return inp_file, num_nodos_sensorizar, tipo_conexion, num_nodos_expansion
 
 def seleccionar_funcion_conexion(tipo_conexion):
@@ -53,55 +60,63 @@ def seleccionar_funcion_conexion(tipo_conexion):
 
 def main():
     inp_file, num_nodos_sensorizar, tipo_conexion, num_nodos_expansion = obtener_input_usuario()
-
+    
+    imprimir_seccion("OBTENER SENSORES")
     nodos_sensorizados = get_selected_sensors(inp_file, num_nodos_sensorizar)
     cable = None
     inalambrica = None
-
+    
+    imprimir_seccion("CÁLCULO DE DISTANCIAS")
+    
     if tipo_conexion == 1:
         funcion_obtener_resultado = seleccionar_funcion_conexion(tipo_conexion)
         cable, index_to_label = funcion_obtener_resultado(inp_file, nodos_sensorizados)
         g = Graph(len(nodos_sensorizados))
         g.graph = cable
-
+   
     elif tipo_conexion == 2:
         funcion_obtener_resultado = seleccionar_funcion_conexion(tipo_conexion)
         inalambrica, index_to_label = funcion_obtener_resultado(inp_file, nodos_sensorizados)
         g = Graph(len(nodos_sensorizados))
         g.graph = inalambrica
-
+        
     else:
         cable, index_to_label = obtener_resultado_cable(inp_file, nodos_sensorizados)
         inalambrica, index_to_label = calcular_distancias_inalambricas(inp_file, nodos_sensorizados)
         # Crear instancia de la clase Graph con matrices de distancia
         g = Graph(len(nodos_sensorizados), cable, inalambrica)
-
+    
     # Llamar a primMST
     result = g.primMST()
 
+    
+    imprimir_seccion("SCADA INICIAL")
     nodes_list = crear_nodos(result, index_to_label)
 
-    G = nodec.create_graph(nodes_list)
-    nodec.draw_graph(G)
-
+    G, Gpos = nodec.create_graph(nodes_list)
+    nodec.draw_graph(G, Gpos)
+    
     paths_SCADA, paths_PLC = nodec.process_graph(G, nodes_list)
 
+    imprimir_seccion("SCADA VERIFICADO")
     nodec.check_connections(nodes_list, paths_PLC, paths_SCADA)
+    
+    G_checked, Gpos = nodec.create_graph(nodes_list)
+    nodec.draw_graph(G_checked, Gpos)
 
-    G_checked = nodec.create_graph(nodes_list)
-    nodec.draw_graph(G_checked)
-
+    imprimir_seccion("SCADA EXPANDIDO")
     nodec.add_random_nodes(nodes_list, num_nodos_expansion)
-
-    G_expanded = nodec.create_graph(nodes_list)
-    nodec.draw_graph(G_expanded)
-
+    
+    G_expanded, Gpos = nodec.create_graph(nodes_list)
+    nodec.draw_graph(G_expanded, Gpos)
+    
     paths_SCADA, paths_PLC = nodec.process_graph(G_expanded, nodes_list)
-
+    
+    imprimir_seccion("SCADA EXPANDIDO VERIFICADO")
     nodec.check_connections(nodes_list, paths_PLC, paths_SCADA)
-
-    G_expanded_checked = nodec.create_graph(nodes_list)
-    nodec.draw_graph(G_expanded_checked)
+    
+    G_expanded_checked, Gpos = nodec.create_graph(nodes_list)
+    nodec.draw_graph(G_expanded_checked, Gpos)
 
 if __name__ == "__main__":
     main()
