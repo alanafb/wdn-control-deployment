@@ -1,5 +1,5 @@
 import wntr
-from math import sqrt
+import networkx as nx
 import numpy as np
 #from prim_algorithm import Graph
 import warnings
@@ -7,55 +7,40 @@ import warnings
 # Suprimir todos los warnings (No se recomienda a menos que estés seguro de lo que estás haciendo)
 warnings.filterwarnings("ignore")
 
-def euclidean_distance(coord1, coord2):
-    x1, y1 = coord1
-    x2, y2 = coord2
-    distance = sqrt((x2 - x1)**2 + (y2 - y1)**2) / 1000
-    return round(distance, 2)
-
-def calcular_distancias(inp_file, nodos_sensorizados):
+def obtener_resultado(inp_file, nodos_sensorizados):
     # Cargar el modelo de la red de distribución de agua
     wn = wntr.network.WaterNetworkModel(inp_file)
-    # Obtener las coordenadas de los nodos
-    coordenadas_originales = {}
-    for node_name, node in wn.nodes():
-        # Suponiendo que las coordenadas están disponibles como atributos del nodo
-        coordenadas_originales[node_name] = (node.coordinates[0], node.coordinates[1])
 
-    # Crear un subdiccionario con los nodos de interés
-    subdiccionario = {nodo: coordenadas_originales[nodo] for nodo in nodos_sensorizados if nodo in coordenadas_originales}
-
-    # Calcular distancias entre cada par de nodos
-    nodos = list(subdiccionario.keys())
-    num_nodos = len(nodos)
+    # Crea una matriz vacía para almacenar las distancias entre nodos críticos
+    num_nodos = len(nodos_sensorizados)
     dist_matrix = np.zeros((num_nodos, num_nodos))
 
-    # Calcular distancias entre cada par de nodos y guardarlas en la matriz
-    for i in range(num_nodos - 1):
-        for j in range(i + 1, num_nodos):
-            nodo1 = nodos[i]
-            nodo2 = nodos[j]
-            distancia = euclidean_distance(subdiccionario[nodo1], subdiccionario[nodo2])
+    # Convertir la red de WNTR a un grafo de NetworkX
+    grafo = wn.to_graph()
+    # Seleccionar dos nodos para calcular la distancia
+    # Calcula las distancias entre todos los pares de nodos críticos
+    for i, source_node in enumerate(nodos_sensorizados):
+        for j, target_node in enumerate(nodos_sensorizados):
+            if i != j:
+                distance = nx.shortest_path_length(grafo.to_undirected(), source=source_node, target=target_node)
+                dist_matrix[i][j] = distance
 
-            # Almacenar la distancia en la matriz en ambas direcciones
-            dist_matrix[i][j] = distancia
-            dist_matrix[j][i] = distancia
-
-    # Imprimir la matriz de distancias entre nodos
-    print("Matriz de distancias entre nodos:")
+    # Imprime la matriz de distancias entre nodos críticos
+    print("Matriz de distancias entre nodos CABLE:")
     print(dist_matrix)
 
     # Crear un diccionario para mapear los índices de la matriz a las etiquetas de nodos
-    index_to_label = {i: nodo for i, nodo in enumerate(nodos)}
+    index_to_label = {i: nodo for i, nodo in enumerate(nodos_sensorizados)}
 
     # Imprimir el diccionario de mapeo
     print("Índice de nodo en la matriz : Etiqueta del nodo")
     for index, label in index_to_label.items():
         print(f"{index}: {label}")
 
-    # g = Graph(num_nodos)
+    # g = Graph(len(nodos_sensorizados))
     # g.graph = dist_matrix
 
     # result = g.primMST()
 
     return dist_matrix, index_to_label
+
