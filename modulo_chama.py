@@ -114,10 +114,10 @@ def get_selected_sensors(inp_file, num_sensors):
     ax1.set_xlabel('Number of sensors')
     ax1.set_ylabel('Expected time to detection (hr)')
     
-    # Plot selected sensors, when using 5 sensors
+    # Plot selected sensors, when using n sensors
     n = num_sensors
     selected_sensors = results[n]['Sensors']
-    selected_sensors.insert(0, "J269")
+    #selected_sensors.insert(0, "J269")
     wntr.graphics.plot_network(wn, node_attribute=selected_sensors, 
                                title=f'Selected sensors, n = {n}')
     
@@ -128,6 +128,3 @@ def get_selected_sensors(inp_file, num_sensors):
                                title=f'Detection time (hr), n = {n}')
     return selected_sensors
 
-# Simple test to ensure results don't change
-#♣assert results[n]['Objective'] == 549535.8247422681
-#assert selected_sensors == ['J219', 'J360', 'J487']
