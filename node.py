@@ -1,6 +1,10 @@
 import networkx as nx
 import matplotlib.pyplot as plt
-import copy
+import random
+import warnings
+
+# Suprimir todos los warnings 
+warnings.filterwarnings("ignore")
 
 class Node:
     def __init__(self, is_SCADA=False, connects_to_SCADA=False, is_PLC=False, name=None):
@@ -12,97 +16,88 @@ class Node:
 
     def connect_to(self, node):
         self.connected_to.append(node)
-        node.connected_to.append(self)
 
     def disconnect_from_SCADA(self):
         if self.connects_to_SCADA:
             self.connects_to_SCADA = False
-            print("Nodo " + self.name + " desconectado de SCADA")
+            print(f"Nodo {self.name} desconectado de SCADA")
             # Buscar la conexión a SCADA y eliminarla
             for node in self.connected_to:
                 if node.is_SCADA:
                     self.connected_to.remove(node)
                     node.connected_to.remove(self)
-                    print("Conexión a SCADA eliminada en Nodo " + self.name)
+                    print(f"Conexión a SCADA eliminada en Nodo {self.name}")
                     break
 
     def connect_to_PLC(self, plc_node):
-        self.connect_to(plc_node)
-        print("Nodo " + self.name + " reconectado a PLC " + plc_node.name)
+        plc_node.connect_to(self)
+        print(f"Nodo {self.name} reconectado a PLC {plc_node.name}")
 
     def connect_PLC_to_SCADA_chain(self, chain):
-        if len(chain) > 3:
-            chain[0].connect_to(chain[2])
-            print("Nueva conexión de nodo " + chain[2].name + " a PLC " + chain[0].name)
+        if len(chain) > 3 and chain[2] not in chain[0].connected_to:
+            self.connect_to(chain[2])
+            print(f"Nueva conexión de nodo {chain[2].name} a PLC {chain[0].name}")
 
-    def add_node_between(self, node_before, node_after, node_list):
-        new_node = Node(name=(node_before.name + "_" + node_after.name))
-        node_before.connected_to.remove(node_after)
-        node_after.connected_to.remove(node_before)
-        new_node.connect_to(node_before)
-        new_node.connect_to(node_after)
+    def add_nodes(self, chain, node_list):
+        len_conexiones = len(chain)
+        if len_conexiones >= 4 and len_conexiones %2 == 0:
+            self.add_node_between(chain[-2], node_list)
+
+    def add_node_between(self, node_before, node_list):
+        new_node = Node(name=f"{node_before.name}_{self.name}")
+         # Verificar si new_node ya existe en node_list
+        if any(node.name == new_node.name for node in node_list):
+            print(f"El nodo {new_node.name} ya existe en la lista. No se añadió.")
+            return
+        node_before.connected_to.remove(self)
+        node_before.connect_to(new_node)
+        new_node.connect_to(self)
         node_list.append(new_node)
-        print("Nuevo nodo añadido entre " + node_before.name + " y " + node_after.name)
+        print(f"Nuevo nodo añadido entre {node_before.name} y {self.name}")
 
+    
+def find_extremes(graph):
+    # Encontrar todos los nodos sin sucesores
+    return [node for node in graph.nodes if not any(graph.successors(node))]
 
-def encontrar_cadenas_PLC(nodos):
-    def encontrar_conexiones_PLC(nodo, cadena_actual, cadenas):
-        cadena_actual.append(nodo)
-        conexiones = [n for n in nodo.connected_to if n not in cadena_actual and not n.is_SCADA]
+def find_PLC_nodes(node_list):
+    PLC_nodes = [node.name for node in node_list if node.is_PLC]
+    return PLC_nodes
 
-        if not conexiones:  # Si no hay más conexiones, agrega la cadena a las cadenas encontradas
-            nueva_cadena = tuple(cadena_actual)
-            if nueva_cadena not in cadenas and nueva_cadena[::-1] not in cadenas:
-                print("Cadena: " + str([nodo.name for nodo in nueva_cadena]))
-                cadenas.add(nueva_cadena)
+def find_SCADA_nodes(node_list):
+    SCADA_nodes = [node.name for node in node_list if node.is_SCADA]
+    return SCADA_nodes
 
-        for conexion in conexiones:
-            nueva_cadena = cadena_actual.copy()  # Crear una nueva lista para cada conexión
-            encontrar_conexiones_PLC(conexion, nueva_cadena, cadenas)
+def generate_paths_from_SCADA(graph, SCADA_node, extreme_nodes):
+    paths_SCADA = []
+    for extreme_node in extreme_nodes:
+        paths = list(nx.all_simple_paths(graph, SCADA_node, extreme_node))
+        # Obtener la lista más larga
+        longest_path = max(paths, key=len, default=[])
+        # Añadir la lista más larga a paths_SCADA después de aplanarla
+        paths_SCADA.append(longest_path)
 
-    cadenas = set()
+    return paths_SCADA
 
-    for nodo_de_interes in nodos:
-        if nodo_de_interes.connects_to_SCADA:
-            for conexion in nodo_de_interes.connected_to:
-                if not conexion.is_SCADA:
-                    encontrar_conexiones_PLC(conexion, [nodo_de_interes], cadenas)
+def generate_paths_from_PLC(graph, PLC_nodes, extreme_nodes, paths_SCADA):
+    paths_PLC = []
+    for PLC_node in PLC_nodes:
+        for extreme_node in extreme_nodes:
+            for path_SCADA in paths_SCADA:
+                if PLC_node in path_SCADA and extreme_node in path_SCADA:
+                    index_PLC = path_SCADA.index(PLC_node)
+                    path_to_extreme = path_SCADA[index_PLC:]
+                    paths_PLC.append(path_to_extreme)
+    return paths_PLC
 
+def order_nodes_by_names(node_list, names):
+    # Crea un diccionario para mapear nombres a nodos
+    name_to_node = {node.name: node for node in node_list}
+    # Utiliza la lista de nombres para ordenar los nodos
+    ordered_nodes = [name_to_node[name] for name in names if name in name_to_node]
+    return ordered_nodes
 
-    return list(cadenas)
-
-def encontrar_cadenas_general(nodos):
-    def encontrar_conexiones_general(nodo, cadena_actual, cadenas):
-        cadena_actual.append(nodo)
-        conexiones = [n for n in nodo.connected_to if n not in cadena_actual and not n.is_SCADA]
-
-        if not conexiones:  # Si no hay más conexiones, agrega la cadena a las cadenas encontradas
-            nueva_cadena = tuple(cadena_actual)
-            if nueva_cadena not in cadenas and nueva_cadena[::-1] not in cadenas:
-                print("Cadena: " + str([nodo.name for nodo in nueva_cadena]))
-                len_conexiones = len(nueva_cadena)
-                if len_conexiones >= 4 and len_conexiones % 2 == 0:
-                    nueva_cadena[len_conexiones-1].add_node_between(nueva_cadena[len_conexiones - 2], nueva_cadena[len_conexiones-1], nodos)
-                cadenas.add(nueva_cadena)
-
-        for conexion in conexiones:
-            nueva_cadena = cadena_actual.copy()  # Crear una nueva lista para cada conexión
-            encontrar_conexiones_general(conexion, nueva_cadena, cadenas)
-
-    cadenas = set()
-
-    for nodo_de_interes in nodos:
-        conectado_solo_a_un_nodo = sum(1 for nodo in nodos if nodo_de_interes in nodo.connected_to) == 1
-        if conectado_solo_a_un_nodo:
-            for conexion in nodo_de_interes.connected_to:
-                encontrar_conexiones_general(conexion, [nodo_de_interes], cadenas)
-
-def actualizar_lista(lista_original, lista_nueva):
-    for i in range(len(lista_original)):
-        if lista_original[i] != lista_nueva[i]:
-            lista_original[i] = lista_nueva[i]
-
-def check_connections(node_list):
+def check_connections(node_list, cadenas_PLC, cadenas_SCADA):
     for node_a in node_list:
         if not node_a.is_PLC and node_a.connects_to_SCADA:
             node_a.disconnect_from_SCADA()
@@ -114,69 +109,109 @@ def check_connections(node_list):
             for node_b in node_list:
                 if node_b != node_a and node_b.connects_to_SCADA and node_b in node_a.connected_to:
                     node_b.disconnect_from_SCADA()
-            
-    # añadir cadenas de nuevas conexiones a lista para no revisarlas al añadir nodos
-    node_list_PLC = copy.deepcopy(node_list)
-    PLC_SCADA_chains = encontrar_cadenas_PLC(node_list_PLC)
-    for chain in PLC_SCADA_chains:
-        chain[0].connect_PLC_to_SCADA_chain(chain)
-        
-    node_list_general = copy.deepcopy(node_list)
-    encontrar_cadenas_general(node_list_general)
     
-    actualizar_lista(node_list, node_list_PLC)
-    node_list.extend(node_list_general)
+    for chain_names in cadenas_PLC:
+        chain_nodes = order_nodes_by_names(node_list, chain_names)
+        if chain_nodes:
+            chain_nodes[0].connect_PLC_to_SCADA_chain(chain_nodes)
+        else:
+            print(f"No se encontró nodo para la cadena {chain_names}")
+    for complete_chain_names in cadenas_SCADA:
+        complete_chain_nodes = order_nodes_by_names(node_list, complete_chain_names)
+        if complete_chain_nodes:
+            complete_chain_nodes[-1].add_nodes(complete_chain_nodes, node_list)
+        else:
+            print(f"No se encontró nodo para la cadena {chain_names}")
 
-def draw_graph(node_list):
-    # Crear un grafo de NetworkX
-    G = nx.Graph()
+def process_graph(G, nodes_list):
+    # Encontrar nodos extremos
+    extreme_nodes = find_extremes(G)
+    
+    # Encontrar nodos PLC y SCADA
+    PLC_nodes = find_PLC_nodes(nodes_list)
+    SCADA_nodes = find_SCADA_nodes(nodes_list)[0]
+    
+    print(f"extreme_nodes: {extreme_nodes}")
+    print(f"PLC_nodes: {PLC_nodes}")
+    print(f"SCADA_node: {SCADA_nodes}")
+      
+    # Generar caminos desde SCADA a nodos extremos
+    paths_SCADA = generate_paths_from_SCADA(G, SCADA_nodes, extreme_nodes)
+    
+    # Imprimir caminos desde SCADA a nodos extremos
+    print("Caminos desde SCADA a nodos extremos:")
+    for paths in paths_SCADA:
+        print(paths) 
+        
+    # Generar caminos desde PLC a nodos extremos utilizando caminos desde SCADA
+    paths_PLC = generate_paths_from_PLC(G, PLC_nodes, extreme_nodes, paths_SCADA)
+    
+    # Imprimir caminos desde PLC a nodos extremos
+    print("Caminos desde PLC a nodos extremos:")
+    for paths in paths_PLC:
+        print(paths)
 
-    # Agregar nodos al grafo con atributos
+    return paths_SCADA, paths_PLC        
+
+                
+def create_graph(node_list):
+    G = nx.DiGraph()
+    Gpos = nx.Graph()
+
     for node in node_list:
-        attributes = {'color': 'skyblue'}  # Color por defecto para nodos que no son SCADA ni PLC
+        attributes = {'color': 'skyblue'}
         if node.is_SCADA:
             attributes['color'] = 'red'
         elif node.is_PLC:
             attributes['color'] = 'green'
         G.add_node(node.name, **attributes)
+        Gpos.add_node(node.name, **attributes)
 
-    # Agregar bordes (conexiones) al grafo
     for node in node_list:
         for connected_node in node.connected_to:
             G.add_edge(node.name, connected_node.name)
+            Gpos.add_edge(node.name, connected_node.name)
 
-    # Dibujar el grafo
+    return G, Gpos
+
+def draw_graph(G, Gpos):
     node_colors = [G.nodes[node]['color'] for node in G.nodes]
+    pos = nx.kamada_kawai_layout(Gpos)
+    nx.draw(G, pos, with_labels=True, node_color=node_colors, font_weight='bold', connectionstyle='arc3,rad=0.1')
+    plt.show()
+    
+def add_random_nodes(node_list, num_nodes):
+    for i in range(1, num_nodes + 1):
+        new_node = Node(
+            is_SCADA=False,
+            connects_to_SCADA=random.choice([True, False]),
+            is_PLC=random.choice([True, False]),
+            name=f'added_{i}'
+        )
 
-    pos = nx.kamada_kawai_layout(G)  # Layout para ubicar los nodos
-    nx.draw(G, pos, with_labels=True, node_color=node_colors, font_weight='bold')
-    plt.show()            
-            
-# node_list = []
+        # Conectar el nuevo nodo a un nodo aleatorio ya presente en la lista original con is_SCADA a True
+        if new_node.connects_to_SCADA:
+            scada_nodes = [node for node in node_list if node.is_SCADA]
+            if scada_nodes:
+                connected_node = random.choice(scada_nodes)
+                new_node.connected_to = [connected_node]
 
-# # Crear instancias de nodos
-# SCADA = Node(is_SCADA=True, name="SCADA")
-# node1 = Node(name="Node 1", connects_to_SCADA=True)
-# node2 = Node(name="Node 2")
-# node3 = Node(name="Node 3")
-# PLC1 = Node(is_PLC=True, name="PLC 1", connects_to_SCADA=True)
-# PLC2 = Node(is_PLC=True, name="PLC 2", connects_to_SCADA=True)
+                # Añadir el nuevo nodo a la lista connected_to del nodo conectado
+                connected_node.connected_to.append(new_node)
 
-# # Establecer conexiones entre nodos
-# SCADA.connected_to = [node1, PLC1, PLC2]
-# node1.connected_to = [SCADA, node2]
-# node2.connected_to = [node1, node3]
-# node3.connected_to = [node2]
-# PLC1.connected_to = [SCADA, PLC2]
-# PLC2.connected_to = [SCADA, PLC1]
-
-# # Agregar los nodos a la lista de nodos
-# node_list.extend([SCADA, node1, node2, node3, PLC1, PLC2])
+        # Si connects_to_SCADA es False, conectar a un nodo aleatorio con is_SCADA a False
+        else:
+            non_scada_nodes = [node for node in node_list if not node.is_SCADA]
+            if non_scada_nodes:
+                connected_node = random.choice(non_scada_nodes)
+                if connected_node.is_PLC:
+                    # Añadir el nuevo nodo a la lista connected_to del nodo conectado
+                    connected_node.connected_to.append(new_node)
+                    if new_node.is_PLC:
+                        new_node.connected_to = [connected_node]
+                else:
+                    new_node.connected_to = [connected_node]
 
 
+        node_list.append(new_node)
 
-# draw_graph(node_list)
-# # Llamar a la función para chequear las conexiones
-# check_connections(node_list)
-
-# draw_graph(node_list)

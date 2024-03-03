@@ -14,6 +14,10 @@ import pandas as pd
 import matplotlib.pylab as plt
 import chama
 import wntr
+import warnings
+
+# Suprimir todos los warnings 
+warnings.filterwarnings("ignore")
 
 def get_selected_sensors(inp_file, num_sensors):
     wn = wntr.network.WaterNetworkModel(inp_file)
@@ -23,8 +27,32 @@ def get_selected_sensors(inp_file, num_sensors):
     valvulas = [link for link in wn.links if wn.links[link].link_type == 'Valve']
 
     nodos_criticos = tanques.copy()
+    
+     # Crear un grafo dirigido a partir de la red
+    grafo = wn.to_graph()
 
-    for component in bombas + valvulas:
+    for bomba in bombas:
+        start_node = wn.get_link(bomba).start_node_name
+        end_node = wn.get_link(bomba).end_node_name
+
+        # Verificar si el nodo de inicio está conectado a más de un nodo (excluyendo nodos con bombas)
+        nodos_adyacentes_start = list(grafo.successors(start_node)) + list(grafo.predecessors(start_node))
+        nodos_adyacentes_start = [nodo for nodo in nodos_adyacentes_start if nodo != end_node 
+                                  and not any(link for link in wn.get_links_for_node(nodo) if wn.get_link(link).link_type == 'Pump' and wn.get_link(link).end_node_name == end_node)]
+
+        if len(nodos_adyacentes_start) > 1 and all(wn.get_node(nodo).node_type != 'Reservoir' for nodo in nodos_adyacentes_start):
+            nodos_criticos.append(start_node)
+
+        # Verificar si el nodo de fin está conectado a más de un nodo (excluyendo nodos con bombas)
+        nodos_adyacentes_end = list(grafo.successors(end_node)) + list(grafo.predecessors(end_node))
+        nodos_adyacentes_end = [nodo for nodo in nodos_adyacentes_end if nodo != start_node
+                                and not any(link for link in wn.get_links_for_node(nodo) if wn.get_link(link).link_type == 'Pump' and wn.get_link(link).end_node_name == start_node)]
+
+
+        if len(nodos_adyacentes_end) > 1 and all(wn.get_node(nodo).node_type != 'Reservoir' for nodo in nodos_adyacentes_end):
+            nodos_criticos.append(end_node)
+            
+    for component in valvulas:
         link = wn.get_link(component)
         start_node = link.start_node.name
         end_node = link.end_node.name
@@ -72,7 +100,7 @@ def get_selected_sensors(inp_file, num_sensors):
                                              'Undetected Impact': sample_times.max()*1.5})
     sensor_characteristics = pd.DataFrame({'Sensor': sensor_names,'Cost': 1})
     sensor_budget = list(range(len(nodos_criticos) + 1))
-    print(sensor_budget)
+   
     results = {}
     for n in sensor_budget:
         impactform = chama.optimize.ImpactFormulation()
@@ -86,20 +114,17 @@ def get_selected_sensors(inp_file, num_sensors):
     ax1.set_xlabel('Number of sensors')
     ax1.set_ylabel('Expected time to detection (hr)')
     
-    # Plot selected sensors, when using 5 sensors
+    # Plot selected sensors, when using n sensors
     n = num_sensors
-    selected_sensors = results[n-1]['Sensors']
-    selected_sensors.insert(0, "J269")
+    selected_sensors = results[n]['Sensors']
+    #selected_sensors.insert(0, "J269")
     wntr.graphics.plot_network(wn, node_attribute=selected_sensors, 
-                               title='Selected sensors, n = f"{n}"')
+                               title=f'Selected sensors, n = {n}')
     
     # Plot detection time for each scenario, when using n sensors
     assessment = results[n]['Assessment']
     assessment.set_index('Scenario', inplace=True)
     wntr.graphics.plot_network(wn, node_attribute=assessment['Impact']/3600, 
-                               title='Detection time (hr), n = f"{n}"')
+                               title=f'Detection time (hr), n = {n}')
     return selected_sensors
 
-# Simple test to ensure results don't change
-#♣assert results[n]['Objective'] == 549535.8247422681
-#assert selected_sensors == ['J219', 'J360', 'J487']

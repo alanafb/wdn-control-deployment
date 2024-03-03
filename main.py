@@ -1,28 +1,22 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Dec  2 17:34:21 2023
-
-@author: alana
-"""
-
 import node as nodec
-#from node import Node, check_connections, draw_graph
-from network_node_distance import obtener_resultado
-from pruebas_chama import get_selected_sensors
+from network_node_distance import obtener_resultado as obtener_resultado_cable
+from distancia_euclidea import calcular_distancias as calcular_distancias_inalambricas
+from modulo_chama import get_selected_sensors
+from prim_algorithm import Graph
+import warnings
+
+# Suprimir todos los warnings 
+warnings.filterwarnings("ignore")
 
 def crear_nodos(result, index_to_label):
     nodes_list = [nodec.Node(is_SCADA=value['is_SCADA'], name=index_to_label[key]) for key, value in result.items()]
 
-    # Establecer connects_to_SCADA si corresponde
-    for i, (key, value) in enumerate(result.items()):
-        node = nodes_list[i]
-        for connection in value['connections']:
-            connection_index = list(index_to_label.keys()).index(connection)
-            if nodes_list[connection_index].is_SCADA:
-                node.connects_to_SCADA = True
-                node.is_PLC = True
-                break  # Detener la verificación si ya se encontró una conexión a SCADA
-
+    # Establecer connected_to_SCADA y is_PLC para nodos conectados al SCADA
+    SCADA_connections = result[0]['connections']
+    for connection in SCADA_connections:
+        nodes_list[connection].connects_to_SCADA = True
+        nodes_list[connection].is_PLC = True
+        
     # Iterar sobre cada nodo en result para configurar connected_to
     for i, value in enumerate(result.values()):
         current_node = nodes_list[i]
@@ -33,17 +27,96 @@ def crear_nodos(result, index_to_label):
             connection_index = list(index_to_label.keys()).index(connection)
             connected_node = nodes_list[connection_index]
             current_node.connected_to.append(connected_node)
-
+            if connected_node.is_PLC or connected_node.is_SCADA:
+                connected_node.connected_to.append(current_node)
+            
     return nodes_list
 
+def imprimir_seccion(titulo):
+    separador = '-' * 50  
+    print(separador)
+    print(titulo)
+    print(separador)
 
-# Usar la función para obtener result e index_to_label
-inp_file = 'C:\\Users\\alana\\Documents\\A_TFM\\WORKSPACE\\CTOWN.INP'
-#nodos_sensorizados = ["J269","J169","J301","T3","T5","T7"]
-nodos_sensorizados = get_selected_sensors(inp_file, 15)
-result, index_to_label = obtener_resultado(inp_file, nodos_sensorizados)
-nodes_list = crear_nodos(result, index_to_label)
 
-nodec.draw_graph(nodes_list)
-nodec.check_connections(nodes_list)
-nodec.draw_graph(nodes_list)
+def obtener_input_usuario():
+    inp_file = input("Introduce la ruta al archivo INP: ")
+    num_nodos_sensorizar = int(input("Introduce el número de nodos a sensorizar: "))
+    tipo_conexion = int(input("Selecciona el tipo de conexión cable, inalámbrica o mixta (1/2/3): "))
+    num_nodos_expansion = int(input("Introduce el número de nodos con los que quieres expandir la red: "))
+    
+    return inp_file, num_nodos_sensorizar, tipo_conexion, num_nodos_expansion
+
+def seleccionar_funcion_conexion(tipo_conexion):
+    if tipo_conexion == 1:
+        return obtener_resultado_cable
+    elif tipo_conexion == 2:
+        return calcular_distancias_inalambricas
+    elif tipo_conexion == 3:
+        return
+    else:
+        print("Tipo de conexión no válido. Se utilizará la conexión por cable por defecto.")
+        return obtener_resultado_cable
+
+def main():
+    inp_file, num_nodos_sensorizar, tipo_conexion, num_nodos_expansion = obtener_input_usuario()
+    
+    imprimir_seccion("OBTENER SENSORES")
+    nodos_sensorizados = get_selected_sensors(inp_file, num_nodos_sensorizar)
+    cable = None
+    inalambrica = None
+    
+    imprimir_seccion("CÁLCULO DE DISTANCIAS")
+    
+    if tipo_conexion == 1:
+        funcion_obtener_resultado = seleccionar_funcion_conexion(tipo_conexion)
+        cable, index_to_label = funcion_obtener_resultado(inp_file, nodos_sensorizados)
+        g = Graph(len(nodos_sensorizados))
+        g.graph = cable
+   
+    elif tipo_conexion == 2:
+        funcion_obtener_resultado = seleccionar_funcion_conexion(tipo_conexion)
+        inalambrica, index_to_label = funcion_obtener_resultado(inp_file, nodos_sensorizados)
+        g = Graph(len(nodos_sensorizados))
+        g.graph = inalambrica
+        
+    else:
+        cable, index_to_label = obtener_resultado_cable(inp_file, nodos_sensorizados)
+        inalambrica, index_to_label = calcular_distancias_inalambricas(inp_file, nodos_sensorizados)
+        # Crear instancia de la clase Graph con matrices de distancia
+        g = Graph(len(nodos_sensorizados), cable, inalambrica)
+    
+    # Llamar a primMST
+    result = g.primMST()
+
+    
+    imprimir_seccion("SCADA INICIAL")
+    nodes_list = crear_nodos(result, index_to_label)
+
+    G, Gpos = nodec.create_graph(nodes_list)
+    nodec.draw_graph(G, Gpos)
+    
+    paths_SCADA, paths_PLC = nodec.process_graph(G, nodes_list)
+
+    imprimir_seccion("SCADA VERIFICADO")
+    nodec.check_connections(nodes_list, paths_PLC, paths_SCADA)
+    
+    G_checked, Gpos = nodec.create_graph(nodes_list)
+    nodec.draw_graph(G_checked, Gpos)
+
+    imprimir_seccion("SCADA EXPANDIDO")
+    nodec.add_random_nodes(nodes_list, num_nodos_expansion)
+    
+    G_expanded, Gpos = nodec.create_graph(nodes_list)
+    nodec.draw_graph(G_expanded, Gpos)
+    
+    paths_SCADA, paths_PLC = nodec.process_graph(G_expanded, nodes_list)
+    
+    imprimir_seccion("SCADA EXPANDIDO VERIFICADO")
+    nodec.check_connections(nodes_list, paths_PLC, paths_SCADA)
+    
+    G_expanded_checked, Gpos = nodec.create_graph(nodes_list)
+    nodec.draw_graph(G_expanded_checked, Gpos)
+
+if __name__ == "__main__":
+    main()
